@@ -23,6 +23,8 @@ jobs:
           mkdir project
           unzip -q project.zip -d project
           test -f project/build.gradle
+          # Correct the single hand-carried hunk header in ci-current.patch.
+          sed -i 's/^@@ -354,7 +373,13 @@/@@ -352,9 +371,15 @@/' ci-current.patch
           cd project
           git apply ../ci-current.patch
           echo "Reconstructed and patched $(find . -type f | wc -l) project files"
