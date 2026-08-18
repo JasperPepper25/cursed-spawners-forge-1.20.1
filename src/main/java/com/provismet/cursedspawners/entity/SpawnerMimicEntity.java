@@ -112,7 +112,10 @@ public final class SpawnerMimicEntity extends Monster {
     @Override
     protected void defineSynchedData() {
         super.defineSynchedData();
-        this.entityData.define(DISPLAY_ENTITY, entityTagFromSpawnData(this.spawnData));
+        // Entity calls this during its superclass constructor, before this class's field initializers run.
+        // Seed the tracked display with a standalone default tag; loadSpawnerData/readAdditionalSaveData
+        // will replace it after construction.
+        this.entityData.define(DISPLAY_ENTITY, defaultSpawnData().getCompound("entity").copy());
     }
 
     @Override
