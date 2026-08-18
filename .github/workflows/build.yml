@@ -28,6 +28,11 @@ jobs:
           cd project
           git apply ../ci-current.patch
           echo "Reconstructed and patched $(find . -type f | wc -l) project files"
+          echo "--- patched source verification ---"
+          grep -nE 'getSpawnAABB|getAABB\(x, y, z\)|Optional<Entity> loaded|Entity entity = EntityType.loadEntityRecursive|loadEntityRecursive\(displayed|playAttackSound|forge_version=' \
+            src/main/java/com/provismet/cursedspawners/entity/SpawnerMimicEntity.java gradle.properties || true
+          echo "--- git status from project directory ---"
+          git status --short || true
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
