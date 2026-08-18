@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.provismet.cursedspawners.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "cursed_spawners.refmap.json",
+  "mixins": [
+    "SpawnerBlockEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
