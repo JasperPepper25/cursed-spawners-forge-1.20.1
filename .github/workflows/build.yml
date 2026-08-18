@@ -15,6 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Apply 1.0.1 fixes
+        run: python3 ci-fix.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
