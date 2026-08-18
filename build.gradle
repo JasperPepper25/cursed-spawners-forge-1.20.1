@@ -6,6 +6,22 @@ plugins {
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
 }
 
+// Temporary PR-only bootstrap: apply the focused 1.0.1 source transformation
+// before ForgeGradle configures the source set. A marker prevents subsequent
+// runServer/runClient Gradle invocations in the same CI workspace from rerunning it.
+def backportFixScript = file('ci-fix.py')
+def backportFixMarker = file('.ci-fix-1.0.1-applied')
+if (backportFixScript.exists() && !backportFixMarker.exists()) {
+    def result = exec {
+        commandLine 'python3', backportFixScript.absolutePath
+        ignoreExitValue = true
+    }
+    if (result.exitValue != 0) {
+        throw new GradleException("1.0.1 source transformation failed with exit code ${result.exitValue}")
+    }
+    backportFixMarker.text = 'applied\n'
+}
+
 version = mod_version
 group = mod_group_id
 base { archivesName = 'cursed-spawners' }
