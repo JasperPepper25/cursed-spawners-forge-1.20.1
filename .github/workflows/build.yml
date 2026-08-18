@@ -48,13 +48,12 @@ jobs:
           cp ci-final/gradle.properties project/gradle.properties
           cp ci-final/README.md project/README.md
           cp ci-final/NOTICE project/NOTICE
-          mkdir -p project/.github/workflows
-          cp ci-final/build.yml project/.github/workflows/build.yml
+          rm -rf project/.github
 
       - name: Replace temporary repository with normal source tree
         shell: bash
         run: |
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'project' -exec rm -rf {} +
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'project' -exec rm -rf {} +
           cp -a project/. .
           rm -rf project
           test -f src/main/java/com/provismet/cursedspawners/CursedSpawners.java
