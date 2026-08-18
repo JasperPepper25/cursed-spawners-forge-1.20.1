@@ -92,12 +92,20 @@ jobs:
             cat run/logs/latest.log >> client-smoke.log
           fi
           tail -n 160 "$LOG"
-          if ! grep -q 'Sound engine started' "$LOG"; then
-            echo "Client never reached initialized sound/resource state (exit $status)."
+          # GitHub's headless Linux runner has neither the native flite narrator
+          # library nor a real OpenAL playback device. Those environmental errors
+          # are allowed; reaching resource reload and the render atlases proves the
+          # Forge client and this mod's client registrations initialized.
+          if ! grep -q 'Reloading ResourceManager: vanilla, mod_resources' "$LOG"; then
+            echo "Client never reached resource reload state (exit $status)."
             exit 1
           fi
           if ! grep -Eq 'Created: .*minecraft:textures/atlas/blocks.png-atlas' "$LOG"; then
             echo 'Client never completed the block texture-atlas build.'
+            exit 1
+          fi
+          if ! grep -Eq 'Created: .*minecraft:textures/atlas/particles.png-atlas' "$LOG"; then
+            echo 'Client never completed the particle texture-atlas build.'
             exit 1
           fi
           if grep -Eq 'MixinApplyError|MixinTransformerError|Failed to create window|Exception in thread "Render thread"|Caught exception from cursed_spawners' "$LOG"; then
