@@ -23,9 +23,7 @@ jobs:
           mkdir project
           unzip -q project.zip -d project
           test -f project/build.gradle
-          # Correct the single hand-carried hunk count in ci-current.patch.
           sed -i 's/^@@ -354,7 +373,13 @@/@@ -354,7 +373,11 @@/' ci-current.patch
-          # Apply root-relative patch paths into the reconstructed project tree.
           git apply --directory=project ci-current.patch
           echo "Reconstructed and patched $(find project -type f | wc -l) project files"
 
@@ -38,8 +36,8 @@ jobs:
             mkdir -p "$GITHUB_WORKSPACE/project/src/main/resources/$(dirname "$file")"
             cp "$file" "$GITHUB_WORKSPACE/project/src/main/resources/$file"
           done
-          test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.ogg' | wc -l)" -ge 17
-          test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.png' | wc -l)" -ge 22
+          test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.ogg' | wc -l)" -eq 16
+          test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.png' | wc -l)" -eq 24
           echo "Restored $(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" \( -name '*.ogg' -o -name '*.png' \) | wc -l) binary assets"
 
       - name: Set up Java 17
@@ -63,8 +61,8 @@ jobs:
           JAR="$(find project/build/libs -maxdepth 1 -name '*.jar' -type f | head -n 1)"
           test -n "$JAR"
           unzip -l "$JAR" > jar-contents.txt
-          test "$(grep -c '\.ogg$' jar-contents.txt)" -ge 17
-          test "$(grep -c '\.png$' jar-contents.txt)" -ge 22
+          test "$(grep -c '\.ogg$' jar-contents.txt)" -eq 16
+          test "$(grep -c '\.png$' jar-contents.txt)" -eq 24
           grep -q 'textures/entity/spawner_mimic.png$' jar-contents.txt
           grep -q 'sounds/mob/spawner_mimic/death.ogg$' jar-contents.txt
           echo "Validated binary resources in $JAR"
