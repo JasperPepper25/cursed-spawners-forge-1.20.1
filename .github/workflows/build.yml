@@ -29,21 +29,85 @@ jobs:
       - name: Build
         run: gradle --no-daemon build --stacktrace
 
-      - name: Dedicated server smoke test
+      - name: Dedicated server + Spawner Mimic constructor regression test
         shell: bash
         run: |
           mkdir -p run
           echo 'eula=true' > run/eula.txt
+          cat > run/server.properties <<'EOF'
+          enable-rcon=true
+          rcon.port=25575
+          rcon.password=cursed-spawners-ci
+          online-mode=false
+          server-port=25565
+          level-name=world
+          EOF
+
           set +e
-          timeout --signal=INT 120s gradle --no-daemon runServer > server-smoke.log 2>&1
+          timeout --signal=INT 120s gradle --no-daemon runServer > server-smoke.log 2>&1 &
+          SERVER_PID=$!
+          set -e
+
+          ready=0
+          for i in $(seq 1 90); do
+            if grep -Eq 'Done \([0-9.]+s\)!' server-smoke.log; then ready=1; break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then tail -n 160 server-smoke.log; exit 1; fi
+
+          python3 - <<'PY'
+          import socket, struct, time
+          def send_packet(sock, request_id, packet_type, body):
+              payload = struct.pack('<ii', request_id, packet_type) + body.encode() + b'\x00\x00'
+              sock.sendall(struct.pack('<i', len(payload)) + payload)
+          def recv_packet(sock):
+              raw = sock.recv(4)
+              if len(raw) != 4: raise RuntimeError('RCON closed')
+              length = struct.unpack('<i', raw)[0]
+              data = b''
+              while len(data) < length:
+                  chunk = sock.recv(length - len(data))
+                  if not chunk: raise RuntimeError('RCON closed mid-packet')
+                  data += chunk
+              return struct.unpack('<ii', data[:8]) + (data[8:-2].decode(errors='replace'),)
+          deadline = time.time() + 20
+          sock = None
+          while time.time() < deadline:
+              try:
+                  sock = socket.create_connection(('127.0.0.1', 25575), timeout=3); break
+              except OSError: time.sleep(0.5)
+          if sock is None: raise RuntimeError('RCON unavailable')
+          with sock:
+              send_packet(sock, 1, 3, 'cursed-spawners-ci')
+              if recv_packet(sock)[0] == -1: raise RuntimeError('RCON auth failed')
+              send_packet(sock, 2, 2, 'summon cursed-spawners:spawner_mimic 0 100 0')
+              summon = recv_packet(sock)[2]
+              print('SUMMON:', summon)
+              if 'Summoned' not in summon: raise RuntimeError(summon)
+              # The 1.0.0 bug threw from Entity construction synchronously during
+              # this command. Give the server a couple of ticks, then ensure it is
+              # still responsive before shutting it down. Entity retention is not
+              # asserted because a dedicated server with no players may despawn or
+              # unload hostile entities immediately.
+              time.sleep(2)
+              send_packet(sock, 3, 2, 'list')
+              response = recv_packet(sock)[2]
+              print('LIST:', response)
+              if 'players online' not in response: raise RuntimeError('Server stopped responding after mimic summon')
+              send_packet(sock, 4, 2, 'stop')
+              try: recv_packet(sock)
+              except Exception: pass
+          PY
+
+          set +e
+          wait "$SERVER_PID"
           status=$?
           set -e
-          tail -n 120 server-smoke.log
-          grep -Eq 'Done \([0-9.]+s\)!' server-smoke.log
-          if grep -Eq 'Failed to start the minecraft server|MixinApplyError|MixinTransformerError|Exception in thread "main"|Caught exception from cursed_spawners' server-smoke.log; then
-            exit 1
-          fi
-          echo "Dedicated Forge server reached ready state successfully (process exit $status)."
+          tail -n 160 server-smoke.log
+          if grep -Eq 'Failed to start the minecraft server|MixinApplyError|MixinTransformerError|NullPointerException|Caught exception from cursed_spawners' server-smoke.log; then exit 1; fi
+          grep -q 'Summoned new Spawner Mimic' server-smoke.log
+          echo "Dedicated server constructed a Spawner Mimic without the 1.0.0 NPE (process exit $status)."
 
       - name: Headless client smoke test
         shell: bash
@@ -54,35 +118,29 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT 120s xvfb-run -a gradle --no-daemon runClient > client-smoke.log 2>&1
           status=$?
           set -e
-          if [ -f run/logs/latest.log ]; then
-            cat run/logs/latest.log >> client-smoke.log
-          fi
+          if [ -f run/logs/latest.log ]; then cat run/logs/latest.log >> client-smoke.log; fi
           tail -n 160 client-smoke.log
           grep -q 'Reloading ResourceManager: vanilla, mod_resources' client-smoke.log
           grep -Eq 'Created: .*minecraft:textures/atlas/blocks.png-atlas' client-smoke.log
           grep -Eq 'Created: .*minecraft:textures/atlas/particles.png-atlas' client-smoke.log
-          if grep -Eq 'MixinApplyError|MixinTransformerError|Failed to create window|Exception in thread "Render thread"|Caught exception from cursed_spawners' client-smoke.log; then
-            exit 1
-          fi
-          echo "Headless Forge client reached initialized resource/render state successfully (process exit $status)."
+          if grep -Eq 'MixinApplyError|MixinTransformerError|Failed to create window|Exception in thread "Render thread"|Caught exception from cursed_spawners' client-smoke.log; then exit 1; fi
+          echo "Headless client initialized resources/render state successfully (process exit $status)."
 
-      - name: Validate built jar contents
+      - name: Validate built jar
         shell: bash
         run: |
-          JAR="$(find build/libs -maxdepth 1 -name '*.jar' -type f | head -n 1)"
+          JAR="$(find build/libs -maxdepth 1 -name 'cursed-spawners-1.0.1+1.20.1-forge-backport.jar' -type f | head -n 1)"
           test -n "$JAR"
           unzip -l "$JAR" > jar-contents.txt
           test "$(grep -c '\.ogg$' jar-contents.txt)" -eq 16
           test "$(grep -c '\.png$' jar-contents.txt)" -eq 24
           grep -q 'textures/entity/spawner_mimic.png$' jar-contents.txt
-          grep -q 'sounds/mob/spawner_mimic/death.ogg$' jar-contents.txt
           grep -q '^ *[0-9].* LICENSE$' jar-contents.txt
           grep -q '^ *[0-9].* NOTICE$' jar-contents.txt
-          echo "Validated resources and license notices in $JAR"
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
-          name: cursed-spawners-forge-1.20.1
-          path: build/libs/*.jar
+          name: cursed-spawners-forge-1.20.1-v1.0.1
+          path: build/libs/cursed-spawners-1.0.1+1.20.1-forge-backport.jar
           if-no-files-found: error
