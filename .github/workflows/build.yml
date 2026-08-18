@@ -25,6 +25,7 @@ jobs:
           test -f project/build.gradle
           sed -i 's/^@@ -354,7 +373,13 @@/@@ -354,7 +373,11 @@/' ci-current.patch
           git apply --directory=project ci-current.patch
+          git apply --directory=project ci-release-adjustments.patch
           echo "Reconstructed and patched $(find project -type f | wc -l) project files"
 
       - name: Restore original binary assets
@@ -66,7 +67,7 @@ jobs:
           status=$?
           set -e
           tail -n 120 server-smoke.log
-          if ! grep -Eq 'Done \([0-9.]+s\)!|Done \([0-9.]+s\)! For help' server-smoke.log; then
+          if ! grep -Eq 'Done \([0-9.]+s\)!' server-smoke.log; then
             echo "Dedicated server never reached the ready state (exit $status)."
             exit 1
           fi
@@ -75,6 +76,35 @@ jobs:
             exit 1
           fi
           echo "Dedicated Forge server reached ready state successfully (process exit $status)."
+
+      - name: Headless client smoke test
+        shell: bash
+        run: |
+          command -v xvfb-run >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y xvfb; }
+          cd project
+          rm -f run/logs/latest.log client-smoke.log
+          set +e
+          LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT 120s xvfb-run -a gradle --no-daemon runClient > client-smoke.log 2>&1
+          status=$?
+          set -e
+          LOG=client-smoke.log
+          if [ -f run/logs/latest.log ]; then
+            cat run/logs/latest.log >> client-smoke.log
+          fi
+          tail -n 160 "$LOG"
+          if ! grep -q 'Sound engine started' "$LOG"; then
+            echo "Client never reached initialized sound/resource state (exit $status)."
+            exit 1
+          fi
+          if ! grep -Eq 'Created: .*minecraft:textures/atlas/blocks.png-atlas' "$LOG"; then
+            echo 'Client never completed the block texture-atlas build.'
+            exit 1
+          fi
+          if grep -Eq 'MixinApplyError|MixinTransformerError|Failed to create window|Exception in thread "Render thread"|Caught exception from cursed_spawners' "$LOG"; then
+            echo 'A fatal client/mod startup error was found in the smoke-test log.'
+            exit 1
+          fi
+          echo "Headless Forge client reached initialized resource/render state successfully (process exit $status)."
 
       - name: Validate built jar contents
         shell: bash
@@ -86,7 +116,9 @@ jobs:
           test "$(grep -c '\.png$' jar-contents.txt)" -eq 24
           grep -q 'textures/entity/spawner_mimic.png$' jar-contents.txt
           grep -q 'sounds/mob/spawner_mimic/death.ogg$' jar-contents.txt
-          echo "Validated binary resources in $JAR"
+          grep -q '^ *[0-9].* LICENSE$' jar-contents.txt
+          grep -q '^ *[0-9].* NOTICE$' jar-contents.txt
+          echo "Validated resources and license notices in $JAR"
 
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
