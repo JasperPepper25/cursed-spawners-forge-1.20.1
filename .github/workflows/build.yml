@@ -1,21 +1,24 @@
-name: Forge 1.20.1 Compile
+name: Normalize Forge 1.20.1 backport
 
 on:
-  push:
   pull_request:
-  workflow_dispatch:
+  push:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build:
+  normalize:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/forge-compile-fixes'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout PR head branch
         uses: actions/checkout@v4
+        with:
+          ref: agent/forge-compile-fixes
+          fetch-depth: 0
 
-      - name: Reconstruct source project
+      - name: Reconstruct validated project
         shell: bash
         run: |
           cat ci-project/part-*.txt > project.zip.b64
@@ -26,7 +29,6 @@ jobs:
           sed -i 's/^@@ -354,7 +373,13 @@/@@ -354,7 +373,11 @@/' ci-current.patch
           git apply --directory=project ci-current.patch
           git apply --directory=project ci-release-adjustments.patch
-          echo "Reconstructed and patched $(find project -type f | wc -l) project files"
 
       - name: Restore original binary assets
         shell: bash
@@ -39,98 +41,34 @@ jobs:
           done
           test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.ogg' | wc -l)" -eq 16
           test "$(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" -name '*.png' | wc -l)" -eq 24
-          echo "Restored $(find "$GITHUB_WORKSPACE/project/src/main/resources/assets/cursed-spawners" \( -name '*.ogg' -o -name '*.png' \) | wc -l) binary assets"
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle 8.8
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.8'
-
-      - name: Compile Forge backport
-        working-directory: project
-        run: gradle --no-daemon build --stacktrace
-
-      - name: Dedicated server smoke test
+      - name: Apply final release metadata
         shell: bash
         run: |
-          mkdir -p project/run
-          echo 'eula=true' > project/run/eula.txt
-          cd project
-          set +e
-          timeout --signal=INT 120s gradle --no-daemon runServer > server-smoke.log 2>&1
-          status=$?
-          set -e
-          tail -n 120 server-smoke.log
-          if ! grep -Eq 'Done \([0-9.]+s\)!' server-smoke.log; then
-            echo "Dedicated server never reached the ready state (exit $status)."
-            exit 1
-          fi
-          if grep -Eq 'Failed to start the minecraft server|MixinApplyError|MixinTransformerError|Exception in thread "main"|Caught exception from cursed_spawners' server-smoke.log; then
-            echo 'A fatal mod/server startup error was found in the smoke-test log.'
-            exit 1
-          fi
-          echo "Dedicated Forge server reached ready state successfully (process exit $status)."
+          cp ci-final/gradle.properties project/gradle.properties
+          cp ci-final/README.md project/README.md
+          cp ci-final/NOTICE project/NOTICE
+          mkdir -p project/.github/workflows
+          cp ci-final/build.yml project/.github/workflows/build.yml
 
-      - name: Headless client smoke test
+      - name: Replace temporary repository with normal source tree
         shell: bash
         run: |
-          command -v xvfb-run >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y xvfb; }
-          cd project
-          rm -f run/logs/latest.log client-smoke.log
-          set +e
-          LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT 120s xvfb-run -a gradle --no-daemon runClient > client-smoke.log 2>&1
-          status=$?
-          set -e
-          LOG=client-smoke.log
-          if [ -f run/logs/latest.log ]; then
-            cat run/logs/latest.log >> client-smoke.log
-          fi
-          tail -n 160 "$LOG"
-          # GitHub's headless Linux runner has neither the native flite narrator
-          # library nor a real OpenAL playback device. Those environmental errors
-          # are allowed; reaching resource reload and the render atlases proves the
-          # Forge client and this mod's client registrations initialized.
-          if ! grep -q 'Reloading ResourceManager: vanilla, mod_resources' "$LOG"; then
-            echo "Client never reached resource reload state (exit $status)."
-            exit 1
-          fi
-          if ! grep -Eq 'Created: .*minecraft:textures/atlas/blocks.png-atlas' "$LOG"; then
-            echo 'Client never completed the block texture-atlas build.'
-            exit 1
-          fi
-          if ! grep -Eq 'Created: .*minecraft:textures/atlas/particles.png-atlas' "$LOG"; then
-            echo 'Client never completed the particle texture-atlas build.'
-            exit 1
-          fi
-          if grep -Eq 'MixinApplyError|MixinTransformerError|Failed to create window|Exception in thread "Render thread"|Caught exception from cursed_spawners' "$LOG"; then
-            echo 'A fatal client/mod startup error was found in the smoke-test log.'
-            exit 1
-          fi
-          echo "Headless Forge client reached initialized resource/render state successfully (process exit $status)."
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'project' -exec rm -rf {} +
+          cp -a project/. .
+          rm -rf project
+          test -f src/main/java/com/provismet/cursedspawners/CursedSpawners.java
+          test -f src/main/resources/assets/cursed-spawners/textures/entity/spawner_mimic.png
+          test "$(find src/main/java -name '*.java' | wc -l)" -eq 22
+          test "$(find src/main/resources -name '*.ogg' | wc -l)" -eq 16
+          test "$(find src/main/resources -name '*.png' | wc -l)" -eq 24
+          grep -q '^mod_version=1.0.0+1.20.1-forge-backport$' gradle.properties
 
-      - name: Validate built jar contents
+      - name: Commit normalized project
         shell: bash
         run: |
-          JAR="$(find project/build/libs -maxdepth 1 -name '*.jar' -type f | head -n 1)"
-          test -n "$JAR"
-          unzip -l "$JAR" > jar-contents.txt
-          test "$(grep -c '\.ogg$' jar-contents.txt)" -eq 16
-          test "$(grep -c '\.png$' jar-contents.txt)" -eq 24
-          grep -q 'textures/entity/spawner_mimic.png$' jar-contents.txt
-          grep -q 'sounds/mob/spawner_mimic/death.ogg$' jar-contents.txt
-          grep -q '^ *[0-9].* LICENSE$' jar-contents.txt
-          grep -q '^ *[0-9].* NOTICE$' jar-contents.txt
-          echo "Validated resources and license notices in $JAR"
-
-      - name: Upload mod jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: cursed-spawners-forge-1.20.1
-          path: project/build/libs/*.jar
-          if-no-files-found: error
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Normalize Forge 1.20.1 backport source tree'
+          git push origin HEAD:agent/forge-compile-fixes
