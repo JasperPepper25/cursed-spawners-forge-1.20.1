@@ -55,6 +55,27 @@ jobs:
         working-directory: project
         run: gradle --no-daemon build --stacktrace
 
+      - name: Dedicated server smoke test
+        shell: bash
+        run: |
+          mkdir -p project/run
+          echo 'eula=true' > project/run/eula.txt
+          cd project
+          set +e
+          timeout --signal=INT 120s gradle --no-daemon runServer > server-smoke.log 2>&1
+          status=$?
+          set -e
+          tail -n 120 server-smoke.log
+          if ! grep -Eq 'Done \([0-9.]+s\)!|Done \([0-9.]+s\)! For help' server-smoke.log; then
+            echo "Dedicated server never reached the ready state (exit $status)."
+            exit 1
+          fi
+          if grep -Eq 'Failed to start the minecraft server|MixinApplyError|MixinTransformerError|Exception in thread "main"|Caught exception from cursed_spawners' server-smoke.log; then
+            echo 'A fatal mod/server startup error was found in the smoke-test log.'
+            exit 1
+          fi
+          echo "Dedicated Forge server reached ready state successfully (process exit $status)."
+
       - name: Validate built jar contents
         shell: bash
         run: |
