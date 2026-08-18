@@ -1,0 +1,22 @@
+Cursed Spawners - Minecraft 1.20.1 Forge Backport
+=================================================
+
+THIS IS A MODIFIED, UNOFFICIAL BACKPORT.
+
+Original software: Cursed Spawners by Provismet
+Original project: https://github.com/Provismet/Cursed-Spawners
+Original target used for this port: tag 1.0.0-mc1.21
+Original license: Lily License v1.1 (included as LICENSE)
+
+Material modifications in this backport:
+- Ported loader integration from Fabric/Quilt to Forge 47.x.
+- Backported Minecraft APIs from 1.21/Java 21 to 1.20.1/Java 17.
+- Forge loader mod id is `cursed_spawners` because Forge 1.20.1 loader ids do not permit hyphens.
+- Original registry/resource namespace `cursed-spawners` is retained where ResourceLocation permits it.
+- Fabric double gamerules are emulated through persistent per-world values exposed under the same `/gamerule` command paths.
+- Fabric packet APIs are replaced by Forge SimpleChannel networking.
+- Several invasive break/mining Mixins are replaced by Forge events.
+- 1.21 wind-charge-only audiovisual effects use the closest available 1.20.1 equivalents.
+- LilyLib runtime use is removed; required behavior is implemented directly in the backport.
+
+This backport has been compiled with ForgeGradle against Minecraft 1.20.1 / Forge 47.4.16 and has passed automated dedicated-server and headless-client startup smoke tests. Gameplay compatibility with third-party modpacks remains subject to in-game testing.

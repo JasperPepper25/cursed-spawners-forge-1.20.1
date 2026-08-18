@@ -1,0 +1,19 @@
+{
+  "entity.cursed-spawners.spawner_mimic": "Spawner Mimic",
+  "gamerule.category.cursed-spawners": "Cursed Spawners",
+  "gamerule.spawnerActionChance": "Bonus Action Chance",
+  "gamerule.spawnerActionChance.description": "The probability of a spawner having an addition effect. Effects can stack. Spawners will not attempt to generate actions if this is zero.",
+  "gamerule.spawnerMimicChance": "Mimic Chance",
+  "gamerule.spawnerMimicChance.description": "The base odds of a Spawner becoming a mimic when broken. Overridden by NBT data when applicable.",
+  "gamerule.spawnerMiningSpeedModifier": "Mining Speed Modifier",
+  "gamerule.spawnerMiningSpeedModifier.description": "Mining speed for spawners is multiplied by this value.",
+  "item.cursed-spawners.mimic_spawn_egg": "Spawner Mimic Spawn Egg",
+  "subtitles.block.spawner.boost": "Spawner accelerates",
+  "subtitles.block.spawner.heal": "Spawner heals",
+  "subtitles.block.spawner.knockback": "Spawner bursts",
+  "subtitles.entity.spawner_mimic.ambient": "Spawner Mimic whistles",
+  "subtitles.entity.spawner_mimic.attack": "Spawner Mimic attacks",
+  "subtitles.entity.spawner_mimic.death": "Spawner Mimic dies",
+  "subtitles.entity.spawner_mimic.hurt": "Spawner Mimic cries",
+  "subtitles.entity.spawner_mimic.step": "Spawner Mimic steps"
+}

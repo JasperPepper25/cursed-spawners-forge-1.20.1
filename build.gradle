@@ -1,0 +1,74 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
+}
+
+version = mod_version
+group = mod_group_id
+base { archivesName = 'cursed-spawners' }
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    copyIdeResources = true
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                cursed_spawners { source sourceSets.main }
+            }
+        }
+        client {}
+        server { args '--nogui' }
+    }
+}
+
+repositories {
+    maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+mixin {
+    add sourceSets.main, 'cursed_spawners.refmap.json'
+    config 'cursed_spawners.mixins.json'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+        minecraft_version: minecraft_version,
+        forge_version: forge_version,
+        mod_id: mod_id,
+        mod_name: mod_name,
+        mod_version: mod_version
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml']) { expand replaceProperties + [project: project] }
+}
+
+tasks.named('jar', Jar).configure {
+    from(rootProject.projectDir) {
+        include 'LICENSE', 'NOTICE'
+    }
+    manifest {
+        attributes([
+            'Specification-Title': mod_name,
+            'Specification-Vendor': 'Provismet / unofficial 1.20.1 Forge backport',
+            'Specification-Version': '1',
+            'Implementation-Title': project.name,
+            'Implementation-Version': project.jar.archiveVersion,
+            'Implementation-Vendor': 'Unofficial backport',
+            'MixinConfigs': 'cursed_spawners.mixins.json'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
