@@ -12,27 +12,15 @@ import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.client.particle.TextureSheetParticle;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-/**
- * Forge 1.20.1 translation of LilyLib's FlatParticle + the original
- * Cursed Spawners AOEChargingParticle behavior.
- *
- * The first backport build used a normal camera-facing billboard particle.
- * This implementation deliberately renders the quad horizontally in world
- * space, matching LilyLib's -90 degree X rotation, and keeps the particle
- * stationary at the original blockY + 0.025 spawn position.
- */
+/** Forge 1.20.1 translation of LilyLib's FlatParticle-backed charging indicator. */
 public final class AOEChargingParticle extends TextureSheetParticle {
     private float previousSize;
     private final float maximumSize;
 
     private AOEChargingParticle(ClientLevel level, double x, double y, double z,
                                 AOEChargingParticleOptions options, SpriteSet sprites) {
-        // Use the no-velocity constructor. Particle's velocity constructor adds
-        // randomized motion even when passed zeroes, which caused the indicator
-        // to drift upward in the first backport build.
         super(level, x, y, z);
         this.xd = 0.0D;
         this.yd = 0.0D;
@@ -60,8 +48,8 @@ public final class AOEChargingParticle extends TextureSheetParticle {
         this.previousSize = this.quadSize;
         this.quadSize = this.maximumSize * (1.0F - (float)this.age / (float)this.lifetime);
 
-        // LilyLib's FlatParticle begins fading during the latter half of life;
-        // the Cursed Spawners subclass then eases alpha upward by 0.1 each tick.
+        // LilyLib's FlatParticle fades during the latter half of life, after which
+        // Cursed Spawners eases alpha back upward by 0.1 each tick.
         if (this.age > this.lifetime / 2) {
             this.alpha = 1.0F - ((float)this.age - (float)(this.lifetime / 2)) / (float)this.lifetime;
         }
@@ -80,21 +68,18 @@ public final class AOEChargingParticle extends TextureSheetParticle {
         float x = (float)(Mth.lerp((double)partialTick, this.xo, this.x) - cameraPos.x());
         float y = (float)(Mth.lerp((double)partialTick, this.yo, this.y) - cameraPos.y());
         float z = (float)(Mth.lerp((double)partialTick, this.zo, this.z) - cameraPos.z());
-
-        // Vanilla particle quads begin in the XY plane. LilyLib's FlatParticle
-        // applies -90 degrees around X, putting the indicator flat on the XZ floor.
-        Quaternionf rotation = new Quaternionf().rotateX(-(float)Math.PI / 2.0F);
-        Vector3f[] corners = new Vector3f[] {
-                new Vector3f(-1.0F, -1.0F, 0.0F),
-                new Vector3f(-1.0F,  1.0F, 0.0F),
-                new Vector3f( 1.0F,  1.0F, 0.0F),
-                new Vector3f( 1.0F, -1.0F, 0.0F)
-        };
-
         float size = this.getQuadSize(partialTick);
-        for (Vector3f corner : corners) {
-            corner.rotate(rotation).mul(size).add(x, y, z);
-        }
+
+        // 1.0.1 rotated a normal billboard onto the XZ plane but retained a winding
+        // whose front face pointed downward. That can be culled by the client/shader
+        // pipeline, making the indicator disappear. Define the horizontal quad
+        // directly with counter-clockwise winding when viewed from above (+Y).
+        Vector3f[] corners = new Vector3f[] {
+                new Vector3f(-size, 0.0F,  size).add(x, y, z),
+                new Vector3f( size, 0.0F,  size).add(x, y, z),
+                new Vector3f( size, 0.0F, -size).add(x, y, z),
+                new Vector3f(-size, 0.0F, -size).add(x, y, z)
+        };
 
         float u0 = this.getU0();
         float u1 = this.getU1();
@@ -104,11 +89,11 @@ public final class AOEChargingParticle extends TextureSheetParticle {
 
         buffer.vertex(corners[0].x(), corners[0].y(), corners[0].z()).uv(u1, v1)
                 .color(this.rCol, this.gCol, this.bCol, this.alpha).uv2(light).endVertex();
-        buffer.vertex(corners[1].x(), corners[1].y(), corners[1].z()).uv(u1, v0)
+        buffer.vertex(corners[1].x(), corners[1].y(), corners[1].z()).uv(u0, v1)
                 .color(this.rCol, this.gCol, this.bCol, this.alpha).uv2(light).endVertex();
         buffer.vertex(corners[2].x(), corners[2].y(), corners[2].z()).uv(u0, v0)
                 .color(this.rCol, this.gCol, this.bCol, this.alpha).uv2(light).endVertex();
-        buffer.vertex(corners[3].x(), corners[3].y(), corners[3].z()).uv(u0, v1)
+        buffer.vertex(corners[3].x(), corners[3].y(), corners[3].z()).uv(u1, v0)
                 .color(this.rCol, this.gCol, this.bCol, this.alpha).uv2(light).endVertex();
     }
 
