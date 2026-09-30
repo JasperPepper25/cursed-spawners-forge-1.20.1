@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "cursed_spawners.refmap.json",
   "mixins": [
-    "SpawnerBlockEntityMixin"
+    "SpawnerBlockEntityMixin",
+    "SpawnerMimicAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
