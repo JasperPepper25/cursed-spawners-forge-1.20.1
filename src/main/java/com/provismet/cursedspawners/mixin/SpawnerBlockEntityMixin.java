@@ -11,7 +11,6 @@ import com.provismet.cursedspawners.spawner.CursedSpawnerData;
 import com.provismet.cursedspawners.utility.SpawnerBreakEffects;
 import com.provismet.cursedspawners.utility.SpawnerEffects;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.NonNullList;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -20,29 +19,22 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
-import net.minecraft.world.Container;
-import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.storage.loot.BuiltInLootTables;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.registries.ForgeRegistries;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -53,7 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Mixin(SpawnerBlockEntity.class)
-public abstract class SpawnerBlockEntityMixin extends BlockEntity implements CursedSpawnerData, Container {
+public abstract class SpawnerBlockEntityMixin extends BlockEntity implements CursedSpawnerData {
     @Unique private static final String REFORGE_ACTIONS = "ReforgeActions";
     @Unique private static final String BREAK_ACTION = "BreakAction";
     @Unique private static final String SHOULD_GENERATE = "ShouldGenerateEffects";
@@ -70,6 +62,8 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
     @Unique private static final String CAN_BOOST = "CanBoost";
     @Unique private static final String BOOST_INTERVAL = "BoostInterval";
     @Unique private static final String BOOST_RADIUS = "BoostRadius";
+    @Unique private static final ResourceLocation NEWTRIALS_WIND_BURST =
+            new ResourceLocation("ntrials", "wind.burst");
 
     @Unique private final ArrayList<String> cursed$reforgeActions = new ArrayList<>();
     @Unique private String cursed$breakAction = SpawnerBreakEffects.NORMAL_BREAK;
@@ -92,10 +86,6 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
     @Unique private int cursed$boostTimer = 200;
     @Unique private int cursed$maxBoostTimer = 200;
     @Unique private double cursed$boostRadius = 0.0D;
-
-    @Unique private ResourceLocation cursed$lootTable = null;
-    @Unique private long cursed$lootTableSeed = 0L;
-    @Unique private final NonNullList<ItemStack> cursed$inventory = NonNullList.withSize(27, ItemStack.EMPTY);
 
     protected SpawnerBlockEntityMixin(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -132,11 +122,6 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
         cursed$knockbackTimer = Math.min(cursed$knockbackTimer, cursed$maxKnockbackTimer);
         cursed$healTimer = Math.min(cursed$healTimer, cursed$maxHealTimer);
         cursed$boostTimer = Math.min(cursed$boostTimer, cursed$maxBoostTimer);
-
-        cursed$lootTable = tag.contains("LootTable", Tag.TAG_STRING) ? ResourceLocation.tryParse(tag.getString("LootTable")) : null;
-        cursed$lootTableSeed = tag.getLong("LootTableSeed");
-        for (int i = 0; i < cursed$inventory.size(); ++i) cursed$inventory.set(i, ItemStack.EMPTY);
-        if (cursed$lootTable == null) ContainerHelper.loadAllItems(tag, cursed$inventory);
     }
 
     @Inject(method = "saveAdditional", at = @At("TAIL"))
@@ -161,12 +146,6 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
         tag.putBoolean(CAN_BOOST, cursed$canBoost);
         tag.putInt(BOOST_INTERVAL, cursed$maxBoostTimer);
         tag.putDouble(BOOST_RADIUS, cursed$boostRadius);
-
-        if (cursed$lootTable != null) {
-            tag.putString("LootTable", cursed$lootTable.toString());
-            if (cursed$lootTableSeed != 0L) tag.putLong("LootTableSeed", cursed$lootTableSeed);
-        }
-        ContainerHelper.saveAllItems(tag, cursed$inventory, false);
     }
 
     @Inject(method = "serverTick", at = @At("HEAD"))
@@ -265,11 +244,7 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
             }
         }
 
-        if (dangerLevel > 0 && cursed$lootTable == null) {
-            cursed$lootTable = dangerLevel < 3 ? BuiltInLootTables.JUNGLE_TEMPLE
-                    : dangerLevel < 6 ? BuiltInLootTables.SIMPLE_DUNGEON
-                    : BuiltInLootTables.WOODLAND_MANSION;
-        }
+        // v1.1.0 intentionally removes the original danger-level hidden loot table.
         cursed$shouldGenerateEffects = false;
     }
 
@@ -291,7 +266,16 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
             player.push(impulse.x, impulse.y, impulse.z);
             player.hurtMarked = true;
         }
-        level.playSound(null, pos, ModRegistry.BLOCK_SPAWNER_KNOCKBACK.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
+        level.playSound(null, pos, cursed$knockbackSound(), SoundSource.BLOCKS, 1.0F, 1.0F);
+    }
+
+    @Unique
+    private static SoundEvent cursed$knockbackSound() {
+        if (ModList.get().isLoaded("ntrials")) {
+            SoundEvent windBurst = ForgeRegistries.SOUND_EVENTS.getValue(NEWTRIALS_WIND_BURST);
+            if (windBurst != null) return windBurst;
+        }
+        return ModRegistry.BLOCK_SPAWNER_KNOCKBACK.get();
     }
 
     @Unique
@@ -339,45 +323,4 @@ public abstract class SpawnerBlockEntityMixin extends BlockEntity implements Cur
     public double cursedSpawners$getMimicChance() {
         return cursed$mimicChance;
     }
-
-    @Unique
-    private void cursed$unpackLoot() {
-        if (cursed$lootTable == null || !(this.level instanceof ServerLevel server)) return;
-        ResourceLocation tableId = cursed$lootTable;
-        cursed$lootTable = null;
-        LootTable table = server.getServer().getLootData().getLootTable(tableId);
-        LootParams params = new LootParams.Builder(server)
-                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(this.worldPosition))
-                .create(LootContextParamSets.CHEST);
-        // Use vanilla's container-fill path rather than assigning generated stacks
-        // sequentially. This preserves LootTableSeed, random slot selection, stack
-        // splitting, and Forge global-loot-modifier handling. cursed$lootTable is
-        // cleared before fill(), so our Container#setItem implementation cannot
-        // recurse back into this method.
-        table.fill(this, params, cursed$lootTableSeed);
-        setChanged();
-    }
-
-    @Override
-    public void cursedSpawners$dropRewardLoot(ServerLevel level, BlockPos pos) {
-        cursed$unpackLoot();
-        Vec3 center = Vec3.atCenterOf(pos);
-        for (int i = 0; i < cursed$inventory.size(); ++i) {
-            ItemStack stack = cursed$inventory.get(i);
-            if (stack.isEmpty()) continue;
-            level.addFreshEntity(new ItemEntity(level, center.x, center.y, center.z, stack.copy()));
-            cursed$inventory.set(i, ItemStack.EMPTY);
-        }
-    }
-
-    /* Original spawners expose a hidden 27-slot lootable inventory that players cannot open. */
-    @Override public int getContainerSize() { return 27; }
-    @Override public boolean isEmpty() { cursed$unpackLoot(); return cursed$inventory.stream().allMatch(ItemStack::isEmpty); }
-    @Override public ItemStack getItem(int slot) { cursed$unpackLoot(); return cursed$inventory.get(slot); }
-    @Override public ItemStack removeItem(int slot, int amount) { cursed$unpackLoot(); ItemStack out = ContainerHelper.removeItem(cursed$inventory, slot, amount); if (!out.isEmpty()) setChanged(); return out; }
-    @Override public ItemStack removeItemNoUpdate(int slot) { cursed$unpackLoot(); return ContainerHelper.takeItem(cursed$inventory, slot); }
-    @Override public void setItem(int slot, ItemStack stack) { cursed$unpackLoot(); cursed$inventory.set(slot, stack); if (stack.getCount() > getMaxStackSize()) stack.setCount(getMaxStackSize()); setChanged(); }
-    @Override public boolean stillValid(Player player) { return false; }
-    @Override public void clearContent() { cursed$unpackLoot(); for (int i = 0; i < cursed$inventory.size(); ++i) cursed$inventory.set(i, ItemStack.EMPTY); setChanged(); }
 }
-
