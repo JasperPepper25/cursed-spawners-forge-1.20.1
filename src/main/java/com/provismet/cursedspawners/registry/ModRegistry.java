@@ -4,15 +4,16 @@ package com.provismet.cursedspawners.registry;
 import com.provismet.cursedspawners.CursedSpawners;
 import com.provismet.cursedspawners.entity.SpawnerMimicEntity;
 import com.provismet.cursedspawners.particle.AOEChargingParticleOptions;
-import net.minecraft.core.registries.Registries;
+import com.mojang.serialization.Codec;
+import net.minecraft.core.particles.ParticleType;
+import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
-import net.minecraft.core.particles.ParticleType;
-import com.mojang.serialization.Codec;
-import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
@@ -93,7 +94,16 @@ public final class ModRegistry {
     public static final class ModEvents {
         @SubscribeEvent
         public static void attributes(EntityAttributeCreationEvent event) {
-            event.put(SPAWNER_MIMIC.get(), SpawnerMimicEntity.createAttributes().build());
+            // v1.1.0 deliberately makes Mimics durable enough to survive their own mob screen.
+            event.put(SPAWNER_MIMIC.get(), Monster.createMonsterAttributes()
+                    .add(Attributes.MAX_HEALTH, 20.0D)
+                    .add(Attributes.KNOCKBACK_RESISTANCE, 0.8D)
+                    .add(Attributes.ARMOR, 30.0D)
+                    .add(Attributes.ARMOR_TOUGHNESS, 10.0D)
+                    .add(Attributes.MOVEMENT_SPEED, 0.275D)
+                    .add(Attributes.ATTACK_DAMAGE, 2.0D)
+                    .add(Attributes.ATTACK_KNOCKBACK, 1.0D)
+                    .build());
         }
 
         @SubscribeEvent
