@@ -7,6 +7,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(SpawnerMimicEntity.class)
 public interface SpawnerMimicAccessor {
-    @Accessor("spawnData")
+    @Accessor(value = "spawnData", remap = false)
     CompoundTag cursedSpawners$getSpawnData();
 }
