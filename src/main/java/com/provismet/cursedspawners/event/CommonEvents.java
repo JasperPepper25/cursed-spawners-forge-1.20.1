@@ -153,6 +153,7 @@ public final class CommonEvents {
             mimic.moveTo(context.pos.getX() + 0.5D, context.pos.getY(), context.pos.getZ() + 0.5D,
                     level.random.nextFloat() * 360.0F, 0.0F);
             mimic.setLastHurtByMob(event.getPlayer());
+            mimic.setPersistenceRequired();
             if (!context.deferredSpirits.isEmpty()) {
                 mimic.getPersistentData().put(DEFERRED_SPIRITS_KEY, context.deferredSpirits.copy());
             }
@@ -201,7 +202,7 @@ public final class CommonEvents {
         mimic.spawnAtLocation(new ItemStack(Items.GOLDEN_APPLE, 1 + level.random.nextInt(2)));
 
         if (level.random.nextFloat() >= 0.25F) return;
-        CompoundTag spawnData = ((SpawnerMimicAccessor)mimic).cursedSpawners$getSpawnData();
+        CompoundTag spawnData = ((SpawnerMimicAccessor)(Object)mimic).cursedSpawners$getSpawnData();
         CompoundTag entityTag = spawnData.contains("entity", Tag.TAG_COMPOUND)
                 ? spawnData.getCompound("entity") : spawnData;
         EntityType.by(entityTag).ifPresent(entityType -> {
