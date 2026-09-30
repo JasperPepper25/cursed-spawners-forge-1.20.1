@@ -9,5 +9,4 @@ public interface CursedSpawnerData {
     void cursedSpawners$tick(ServerLevel level, BlockPos pos);
     boolean cursedSpawners$attemptBreak(ServerLevel level, BlockPos pos);
     double cursedSpawners$getMimicChance();
-    void cursedSpawners$dropRewardLoot(ServerLevel level, BlockPos pos);
 }
